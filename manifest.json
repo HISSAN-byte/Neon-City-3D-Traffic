@@ -1,0 +1,38 @@
+{
+  "background_color": "#ffffff",
+  "description": "Websites for you and your projects, hosted directly from your GitHub repository. Just edit, push, and your changes are live.",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "Neon City 3D Traffic",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "Neon City",
+  "start_url": "/",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "https://github.io/favicon.ico",
+      "type": "image/x-icon",
+      "isSquare": false,
+      "isPng": false,
+      "isWebp": false,
+      "isJpg": false,
+      "width": 0,
+      "is512x512": false,
+      "is256x256": false,
+      "is192x192": false
+    },
+    {
+      "src": "https://github.io/favicon.ico",
+      "type": "image/x-icon",
+      "isSquare": false,
+      "isPng": false,
+      "isWebp": false,
+      "isJpg": false,
+      "width": 0,
+      "is512x512": false,
+      "is256x256": false,
+      "is192x192": false
+    }
+  ]
+}
