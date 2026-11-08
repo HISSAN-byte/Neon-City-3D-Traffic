@@ -1,0 +1,652 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>NEON CITY TRAFFIC 3D</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#080d18;color:white;font-family:Arial;overflow:hidden}
+button,select{font-size:15px;border:0;border-radius:10px;padding:12px;font-weight:bold}
+button{background:#00c8ff;color:#00121c}
+button:active{transform:scale(.96)}
+#menu{position:fixed;inset:0;overflow:auto;background:linear-gradient(145deg,#071323,#101c37);padding:16px;text-align:center}
+h1{color:#00d9ff;text-shadow:0 0 15px #00bfff}
+.panel{background:#15243b;border:1px solid #294866;border-radius:15px;padding:14px;margin:12px auto;max-width:520px}
+label{display:block;text-align:left;margin:10px 0 5px;color:#bceeff}
+select{width:100%;background:#eaf8ff;color:#071323}
+#startBtn{width:100%;margin-top:15px;background:#00e6a0;font-size:19px}
+.small{font-size:12px;color:#a9c4d8}
+#game{position:fixed;inset:0;display:none}
+canvas{display:block}
+#hud{position:fixed;top:8px;left:8px;right:8px;display:none;pointer-events:none}
+.hudrow{display:flex;justify-content:space-between;gap:5px;flex-wrap:wrap}
+.stat{background:#071323dd;border:1px solid #00c8ff;padding:8px;border-radius:9px;font-size:12px}
+#controls{position:fixed;bottom:18px;left:0;right:0;display:none;justify-content:space-around}
+.control{width:85px;height:65px;border-radius:16px;font-size:19px}
+#pauseBtn{position:fixed;right:12px;bottom:100px;display:none}
+#message{position:fixed;top:42%;left:5%;width:90%;text-align:center;font-size:22px;font-weight:bold;pointer-events:none}
+#gameOver{display:none;position:fixed;inset:0;background:#06101eee;align-items:center;justify-content:center;text-align:center;padding:20px}
+#gameOver .panel{width:100%;max-width:380px}
+#missionList{max-height:180px;overflow:auto;text-align:left;font-size:12px}
+.mission{padding:7px;border-bottom:1px solid #345}
+.locked{color:#778899}
+.unlocked{color:#00e6a0}
+</style>
+</head>
+<body>
+
+<div id="menu">
+<h1>NEON CITY TRAFFIC 3D</h1>
+<p class="small">Drive • Collect Coins • Complete 500 Missions</p>
+
+<div class="panel">
+<label>SELECT MAP</label>
+<select id="map">
+<option value="neon">NEON CITY</option>
+<option value="town">TOWN CITY</option>
+</select>
+
+<label>GAME MODE</label>
+<select id="mode">
+<option value="mission">MISSION MODE</option>
+<option value="free">FREE DRIVE</option>
+<option value="time">TIME TRIAL - 90 SECONDS</option>
+</select>
+
+<label>YOUR CAR DIFFICULTY</label>
+<select id="difficulty">
+<option value="easy">EASY - 90 KM/H</option>
+<option value="normal">NORMAL - 150 KM/H</option>
+<option value="hard">HARD - 230 KM/H</option>
+<option value="extreme">EXTREME - 330 KM/H</option>
+</select>
+
+<label>YOUR CAR PAINT</label>
+<select id="paint">
+<option value="#ff3030">RED</option>
+<option value="#168cff">BLUE</option>
+<option value="#ffffff">WHITE</option>
+<option value="#ffe600">YELLOW</option>
+<option value="#b34dff">PURPLE</option>
+<option value="#18e66b">GREEN</option>
+</select>
+
+<button id="startBtn">START GAME</button>
+<p class="small">Traffic cars always use the same fast speed at every difficulty.</p>
+</div>
+
+<div class="panel">
+<h3>GARAGE</h3>
+<p id="garageInfo">Coins: 0 | Engine Level: 1</p>
+<button id="upgradeBtn">UPGRADE ENGINE</button>
+<button id="soundBtn">SOUND: ON</button>
+</div>
+
+<div class="panel">
+<h3>500 MISSIONS</h3>
+<p id="missionInfo"></p>
+<div id="missionList"></div>
+</div>
+</div>
+
+<div id="game"></div>
+
+<div id="hud">
+<div class="hudrow">
+<div class="stat" id="speed">0 KM/H</div>
+<div class="stat" id="coins">COINS: 0</div>
+<div class="stat" id="lives">LIVES: 3</div>
+<div class="stat" id="score">SCORE: 0</div>
+</div>
+<div class="hudrow" style="margin-top:6px">
+<div class="stat" id="missionText">MISSION 1</div>
+<div class="stat" id="timer">TIME: --</div>
+</div>
+</div>
+
+<div id="controls">
+<button class="control" id="leftBtn">◀</button>
+<button class="control" id="brakeBtn">BRAKE</button>
+<button class="control" id="rightBtn">▶</button>
+</div>
+
+<button id="pauseBtn">PAUSE</button>
+<div id="message"></div>
+
+<div id="gameOver">
+<div class="panel">
+<h2 id="resultTitle">GAME OVER</h2>
+<p id="resultText"></p>
+<button id="restartBtn">PLAY AGAIN</button>
+<button id="menuBtn">MAIN MENU</button>
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+"use strict";
+
+const $=id=>document.getElementById(id);
+const SAVE_KEY="neonCityTraffic3D_save_v4";
+
+// TRAFFIC SETTINGS: THESE NEVER CHANGE WITH PLAYER DIFFICULTY.
+const TRAFFIC_SPEED=38;
+const TRAFFIC_SPAWN_INTERVAL=1.05;
+
+let save={coins:0,unlocked:1,completed:0,engine:1,paint:"#ff3030",sound:true};
+try{
+ const old=JSON.parse(localStorage.getItem(SAVE_KEY));
+ if(old)save={...save,...old};
+}catch(e){}
+
+let scene,camera,renderer,player;
+let traffic=[],coinsObjects=[],roadLines=[],buildings=[];
+let running=false,paused=false,gameEnded=false;
+let speed=0,targetLane=1;
+let score=0,runCoins=0,lives=3,distance=0,overtakes=0,nearMisses=0;
+let elapsed=0,spawnClock=0,coinClock=0;
+let maxSpeed=90,mode="mission",mapType="neon";
+let brakeHeld=false,lastFrame=0,animationId=null,audioContext=null;
+
+const laneX=[-5,0,5];
+const difficultySpeeds={easy:90,normal:150,hard:230,extreme:330};
+
+function saveGame(){
+ try{localStorage.setItem(SAVE_KEY,JSON.stringify(save))}catch(e){}
+}
+
+function getObjective(n){
+ const type=(n-1)%5;
+ const stage=Math.floor((n-1)/5)+1;
+ if(type===0)return{type:"coins",target:5+stage*2,label:"Collect "+(5+stage*2)+" coins"};
+ if(type===1)return{type:"distance",target:500+stage*250,label:"Drive "+(500+stage*250)+" metres"};
+ if(type===2)return{type:"overtakes",target:5+stage*2,label:"Overtake "+(5+stage*2)+" cars"};
+ if(type===3)return{type:"score",target:500+stage*300,label:"Reach "+(500+stage*300)+" score"};
+ return{type:"near",target:2+stage,label:"Near misses: "+(2+stage)};
+}
+
+function updateMenu(){
+ $("garageInfo").textContent="Coins: "+save.coins+" | Engine Level: "+save.engine;
+ $("missionInfo").textContent="Completed: "+save.completed+" / 500";
+ $("upgradeBtn").textContent="UPGRADE ENGINE - "+(save.engine*100)+" COINS";
+ $("soundBtn").textContent="SOUND: "+(save.sound?"ON":"OFF");
+ $("paint").value=save.paint;
+
+ const list=$("missionList");
+ list.innerHTML="";
+ const fragment=document.createDocumentFragment();
+
+ for(let i=1;i<=500;i++){
+  const item=document.createElement("div");
+  item.className="mission "+(i<=save.unlocked?"unlocked":"locked");
+  item.textContent="MISSION "+i+" — "+getObjective(i).label+
+   (i<=save.unlocked?" ✓ UNLOCKED":" 🔒 LOCKED");
+  fragment.appendChild(item);
+ }
+ list.appendChild(fragment);
+}
+
+function playSound(freq=440,duration=.09,type="sine"){
+ if(!save.sound)return;
+ try{
+  audioContext=audioContext||new(window.AudioContext||window.webkitAudioContext)();
+  if(audioContext.state==="suspended")audioContext.resume();
+  const osc=audioContext.createOscillator();
+  const gain=audioContext.createGain();
+  osc.type=type;
+  osc.frequency.value=freq;
+  gain.gain.setValueAtTime(.06,audioContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(.001,audioContext.currentTime+duration);
+  osc.connect(gain);
+  gain.connect(audioContext.destination);
+  osc.start();
+  osc.stop(audioContext.currentTime+duration);
+ }catch(e){}
+}
+
+function showMessage(msg){
+ $("message").textContent=msg;
+ setTimeout(()=>{if($("message").textContent===msg)$("message").textContent=""},1300);
+}
+
+function makeBox(w,h,d,color,x,y,z,parent=scene){
+ const mesh=new THREE.Mesh(
+  new THREE.BoxGeometry(w,h,d),
+  new THREE.MeshLambertMaterial({color})
+ );
+ mesh.position.set(x,y,z);
+ parent.add(mesh);
+ return mesh;
+}
+
+function createCar(color){
+ const group=new THREE.Group();
+ makeBox(2,.8,3.7,color,0,.75,0,group);
+ makeBox(1.55,.75,1.65,0x172b40,0,1.45,-.15,group);
+ makeBox(1.48,.08,.1,0x9eeaff,0,1.65,.65,group);
+
+ for(const x of [-1,1]){
+  for(const z of [-1.15,1.15]){
+   const wheel=new THREE.Mesh(
+    new THREE.CylinderGeometry(.38,.38,.25,12),
+    new THREE.MeshLambertMaterial({color:0x111111})
+   );
+   wheel.rotation.z=Math.PI/2;
+   wheel.position.set(x,.4,z);
+   group.add(wheel);
+  }
+ }
+ return group;
+}
+
+function createWorld(){
+ scene=new THREE.Scene();
+ scene.background=new THREE.Color(mapType==="neon"?0x07162d:0x9cc8ed);
+ scene.fog=new THREE.Fog(mapType==="neon"?0x07162d:0x9cc8ed,45,180);
+
+ camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,400);
+ camera.position.set(0,7,12);
+ camera.lookAt(0,0,-12);
+
+ renderer=new THREE.WebGLRenderer({antialias:true});
+ renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
+ renderer.setSize(innerWidth,innerHeight);
+ $("game").innerHTML="";
+ $("game").appendChild(renderer.domElement);
+
+ scene.add(new THREE.HemisphereLight(0xffffff,0x394b63,2));
+ const sun=new THREE.DirectionalLight(0xffffff,1.2);
+ sun.position.set(-5,15,8);
+ scene.add(sun);
+
+ makeBox(200,.3,260,0x303943,0,-.2,-90);
+ makeBox(200,.25,260,0x16804b,-105,-.25,-90);
+ makeBox(200,.25,260,0x16804b,105,-.25,-90);
+ makeBox(18,.12,260,0x252b34,0,0,-90);
+ makeBox(.22,.15,260,0xffffff,-9,.09,-90);
+ makeBox(.22,.15,260,0xffffff,9,.09,-90);
+
+ for(let z=-215;z<25;z+=12){
+  for(const x of [-2.5,2.5]){
+   roadLines.push(makeBox(.12,.04,5,0xffffff,x,.09,z));
+  }
+ }
+
+ for(let i=0;i<30;i++){
+  const z=-i*8-5;
+  for(const side of [-1,1]){
+   const height=mapType==="town"?8+Math.random()*13:12+Math.random()*28;
+   const width=5+Math.random()*5;
+   const colors=mapType==="town"
+    ?[0xc4a77d,0xe2d2b0,0x8eafc5,0xb8c8d6]
+    :[0x102d55,0x183c70,0x25295b,0x30335c];
+   const b=makeBox(width,height,6,colors[i%4],side*(13+Math.random()*5),height/2,z);
+   buildings.push(b);
+   if(mapType==="town"&&i%3===0){
+    makeBox(width*.65,1,1.5,0xffc34d,side*15,height*.55,z+3.1);
+   }
+  }
+ }
+
+ player=createCar(save.paint);
+ player.position.set(0,0,5);
+ player.userData.cooldown=false;
+ scene.add(player);
+}
+
+function initThree(){
+ if(!window.THREE){
+  alert("3D engine could not load. Check your internet connection and reload Preview.");
+  return false;
+ }
+ try{
+  createWorld();
+  return true;
+ }catch(e){
+  console.error(e);
+  alert("The 3D game could not start. Reload TrebEdit Preview.");
+  return false;
+ }
+}
+
+function spawnTraffic(){
+ const colors=[0xff3030,0xffbb22,0x22aaff,0xeeeeee,0x8d52ff,0x20cc77];
+ const car=createCar(colors[Math.floor(Math.random()*colors.length)]);
+ const lane=Math.floor(Math.random()*3);
+ car.position.set(laneX[lane],0,-125);
+ car.userData={lane,hit:false,passed:false};
+ scene.add(car);
+ traffic.push(car);
+}
+
+function spawnCoin(){
+ const coin=new THREE.Mesh(
+  new THREE.TorusGeometry(.55,.16,8,18),
+  new THREE.MeshBasicMaterial({color:0xffdf22})
+ );
+ const lane=Math.floor(Math.random()*3);
+ coin.position.set(laneX[lane],1.3,-125);
+ scene.add(coin);
+ coinsObjects.push(coin);
+}
+
+function resetGame(){
+ speed=0;targetLane=1;score=0;runCoins=0;lives=3;
+ distance=0;overtakes=0;nearMisses=0;elapsed=0;
+ spawnClock=0;coinClock=0;paused=false;gameEnded=false;brakeHeld=false;
+
+ traffic.forEach(x=>scene.remove(x));
+ coinsObjects.forEach(x=>scene.remove(x));
+ traffic=[];coinsObjects=[];
+ player.position.set(0,0,5);
+ player.userData.cooldown=false;
+}
+
+function startGame(){
+ if(running)return;
+
+ mapType=$("map").value;
+ mode=$("mode").value;
+ maxSpeed=difficultySpeeds[$("difficulty").value]||90;
+ save.paint=$("paint").value;
+ saveGame();
+
+ if(!initThree())return;
+ resetGame();
+
+ running=true;
+ $("menu").style.display="none";
+ $("game").style.display="block";
+ $("hud").style.display="block";
+ $("controls").style.display="flex";
+ $("pauseBtn").style.display="block";
+ $("gameOver").style.display="none";
+
+ $("missionText").textContent=mode==="mission"?"MISSION "+save.unlocked:mode.toUpperCase();
+ lastFrame=performance.now();
+
+ if(animationId)cancelAnimationFrame(animationId);
+ animationId=requestAnimationFrame(gameLoop);
+ playSound(650,.15);
+}
+
+function changeLane(dir){
+ if(!running||paused||gameEnded)return;
+ targetLane=Math.max(0,Math.min(2,targetLane+dir));
+ playSound(350,.04);
+}
+
+function crash(){
+ if(!player||player.userData.cooldown)return;
+ player.userData.cooldown=true;
+ lives--;
+ playSound(100,.3,"sawtooth");
+ showMessage("CRASH!");
+ setTimeout(()=>{if(player)player.userData.cooldown=false},1200);
+ if(lives<=0)endGame(false);
+}
+
+function collectCoin(c){
+ scene.remove(c);
+ runCoins++;
+ save.coins++;
+ score+=100;
+ playSound(850,.1);
+}
+
+function checkMission(){
+ if(mode!=="mission")return false;
+ const obj=getObjective(save.unlocked);
+ if(obj.type==="coins")return runCoins>=obj.target;
+ if(obj.type==="distance")return distance>=obj.target;
+ if(obj.type==="overtakes")return overtakes>=obj.target;
+ if(obj.type==="score")return score>=obj.target;
+ if(obj.type==="near")return nearMisses>=obj.target;
+ return false;
+}
+
+function completeMission(){
+ save.completed=Math.max(save.completed,save.unlocked);
+ save.unlocked=Math.min(500,save.unlocked+1);
+ saveGame();
+ playSound(950,.3);
+ showMessage("MISSION COMPLETED!");
+ endGame(true);
+}
+
+function endGame(won){
+ if(gameEnded)return;
+ gameEnded=true;
+ running=false;
+ saveGame();
+ $("gameOver").style.display="flex";
+ $("resultTitle").textContent=won?"MISSION COMPLETED!":"GAME OVER";
+ $("resultText").textContent="Score: "+score+
+ " | Coins: "+runCoins+" | Distance: "+Math.floor(distance)+" m";
+ $("controls").style.display="none";
+ $("pauseBtn").style.display="none";
+ updateMenu();
+}
+
+function togglePause(){
+ if(!running||gameEnded)return;
+ paused=!paused;
+ $("pauseBtn").textContent=paused?"RESUME":"PAUSE";
+ if(!paused){
+  lastFrame=performance.now();
+  animationId=requestAnimationFrame(gameLoop);
+ }
+}
+
+function updateHUD(){
+ $("speed").textContent=Math.floor(speed)+" KM/H";
+ $("coins").textContent="COINS: "+save.coins;
+ $("lives").textContent="LIVES: "+lives;
+ $("score").textContent="SCORE: "+score;
+ $("timer").textContent=mode==="time"?"TIME: "+Math.max(0,Math.ceil(90-elapsed)):"TIME: ∞";
+
+ if(mode==="mission"){
+  const obj=getObjective(save.unlocked);
+  let current=0;
+  if(obj.type==="coins")current=runCoins;
+  if(obj.type==="distance")current=Math.floor(distance);
+  if(obj.type==="overtakes")current=overtakes;
+  if(obj.type==="score")current=score;
+  if(obj.type==="near")current=nearMisses;
+  $("missionText").textContent="MISSION "+save.unlocked+" — "+Math.min(current,obj.target)+"/"+obj.target;
+ }
+}
+
+function updateWorld(dt){
+ // PLAYER SPEED: controlled by selected difficulty.
+ const acceleration=maxSpeed/(5+save.engine*.35);
+ if(brakeHeld)speed=Math.max(0,speed-150*dt);
+ else speed=Math.min(maxSpeed,speed+acceleration*dt);
+
+ const move=speed/90;
+ distance+=move*dt*12;
+ elapsed+=dt;
+ score+=Math.floor(speed*dt*.2);
+
+ player.position.x+=(laneX[targetLane]-player.position.x)*Math.min(1,dt*8);
+ player.rotation.z=(laneX[targetLane]-player.position.x)*-.025;
+
+ camera.position.x+=(player.position.x*.35-camera.position.x)*dt*2;
+ camera.lookAt(player.position.x*.3,0,-12);
+
+ // TRAFFIC SPAWN RATE: fixed for every difficulty.
+ spawnClock+=dt;
+ coinClock+=dt;
+
+ if(spawnClock>=TRAFFIC_SPAWN_INTERVAL){
+  spawnClock=0;
+  spawnTraffic();
+  if(Math.random()<.28)spawnTraffic();
+ }
+
+ if(coinClock>=1.3){
+  coinClock=0;
+  spawnCoin();
+ }
+
+ // TRAFFIC SPEED: fixed at 38. Never uses maxSpeed or difficulty.
+ for(let i=traffic.length-1;i>=0;i--){
+  const car=traffic[i];
+  car.position.z+=TRAFFIC_SPEED*dt;
+
+  const dx=Math.abs(car.position.x-player.position.x);
+  const dz=Math.abs(car.position.z-player.position.z);
+
+  if(dx<1.8&&dz<2.6&&!car.userData.hit){
+   car.userData.hit=true;
+   crash();
+  }else if(dx<2.8&&dz<4&&dz>2.6&&!car.userData.passed){
+   car.userData.passed=true;
+   nearMisses++;
+   score+=50;
+   playSound(550,.06);
+  }
+
+  if(car.position.z>12){
+   if(!car.userData.passed&&!car.userData.hit){
+    overtakes++;
+    score+=75;
+    car.userData.passed=true;
+   }
+   scene.remove(car);
+   traffic.splice(i,1);
+  }
+ }
+
+ for(let i=coinsObjects.length-1;i>=0;i--){
+  const c=coinsObjects[i];
+  c.position.z+=14*dt;
+  c.rotation.y+=dt*3;
+
+  if(Math.abs(c.position.x-player.position.x)<1.5&&
+     Math.abs(c.position.z-player.position.z)<2){
+   collectCoin(c);
+   coinsObjects.splice(i,1);
+  }else if(c.position.z>12){
+   scene.remove(c);
+   coinsObjects.splice(i,1);
+  }
+ }
+
+ roadLines.forEach(line=>{
+  line.position.z+=move*18*dt;
+  if(line.position.z>15)line.position.z=-225;
+ });
+
+ buildings.forEach(b=>{
+  b.position.z+=move*12*dt;
+  if(b.position.z>25)b.position.z=-230;
+ });
+
+ if(mode==="time"&&elapsed>=90){
+  endGame(true);
+  return;
+ }
+
+ if(mode==="mission"&&checkMission()){
+  completeMission();
+  return;
+ }
+
+ updateHUD();
+}
+
+function gameLoop(now){
+ if(!running||paused||gameEnded)return;
+ const dt=Math.min((now-lastFrame)/1000,.05);
+ lastFrame=now;
+
+ updateWorld(dt);
+
+ if(running&&!paused&&!gameEnded){
+  renderer.render(scene,camera);
+  animationId=requestAnimationFrame(gameLoop);
+ }
+}
+
+// START BUTTON CONNECTION
+$("startBtn").addEventListener("click",startGame);
+
+$("leftBtn").addEventListener("pointerdown",e=>{
+ e.preventDefault();changeLane(-1);
+});
+$("rightBtn").addEventListener("pointerdown",e=>{
+ e.preventDefault();changeLane(1);
+});
+
+$("brakeBtn").addEventListener("pointerdown",e=>{
+ e.preventDefault();brakeHeld=true;
+});
+["pointerup","pointercancel","pointerleave"].forEach(event=>{
+ $("brakeBtn").addEventListener(event,()=>brakeHeld=false);
+});
+
+$("pauseBtn").addEventListener("click",togglePause);
+
+$("upgradeBtn").addEventListener("click",()=>{
+ const cost=save.engine*100;
+ if(save.coins>=cost){
+  save.coins-=cost;
+  save.engine++;
+  saveGame();
+  updateMenu();
+  playSound(700,.15);
+ }else alert("You need "+cost+" coins for this upgrade.");
+});
+
+$("soundBtn").addEventListener("click",()=>{
+ save.sound=!save.sound;
+ saveGame();
+ updateMenu();
+ playSound(500,.08);
+});
+
+$("restartBtn").addEventListener("click",()=>{
+ $("gameOver").style.display="none";
+ $("game").style.display="none";
+ $("hud").style.display="none";
+ $("menu").style.display="block";
+ $("controls").style.display="none";
+ updateMenu();
+});
+
+$("menuBtn").addEventListener("click",()=>{
+ running=false;
+ paused=false;
+ if(animationId)cancelAnimationFrame(animationId);
+ $("gameOver").style.display="none";
+ $("game").style.display="none";
+ $("hud").style.display="none";
+ $("controls").style.display="none";
+ $("pauseBtn").style.display="none";
+ $("menu").style.display="block";
+ updateMenu();
+});
+
+window.addEventListener("resize",()=>{
+ if(!camera||!renderer)return;
+ camera.aspect=innerWidth/innerHeight;
+ camera.updateProjectionMatrix();
+ renderer.setSize(innerWidth,innerHeight);
+});
+
+window.addEventListener("keydown",e=>{
+ if(e.key==="ArrowLeft"||e.key.toLowerCase()==="a")changeLane(-1);
+ if(e.key==="ArrowRight"||e.key.toLowerCase()==="d")changeLane(1);
+ if(e.key===" ")brakeHeld=true;
+});
+window.addEventListener("keyup",e=>{
+ if(e.key===" ")brakeHeld=false;
+});
+
+updateMenu();
+</script>
+</body>
+</html>
